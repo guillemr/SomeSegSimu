@@ -1,0 +1,881 @@
+---
+title: "Some changepoint simulation"
+author: "P. Fearnhead & G. Rigaill"
+date: "15 février 2018"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary & Parameters
+
+Here we explore some segmentation approaches and their performances on various datasets.
+This is a draft.
+
+```{r}
+mc.cores=4
+nb_simu_per_dataset=100
+```
+
+## Simulated datasets
+
+We will test a number of segmentation approaches on various simulated datasets.
+For each datasets we need to define a number of parameters 
+
+- a name
+- the mean of each vector (mu)
+- the changes (bkp)
+- the length of each segment (Lg)
+- the standard deviation (sigma)
+- the true number of changes (Ktrue)
+- the signal (signal)
+
+We store the parameter of each dataset in a list. Here is 
+the code for our first dataset.
+
+```{r dataset1, fig.height=5}
+Simu <- list()
+isimu <- 0
+
+isimu <- isimu+1
+Simu[[isimu]] <- list()
+Simu[[isimu]]$Name <- "Dataset-1, K=12, n=2048"
+Simu[[isimu]]$bkp  <- c(0, c(205, 267, 308, 472, 512, 820, 902, 1332, 1557, 
+                                  1598, 1659) - 1, 2048)
+Simu[[isimu]]$Lg <- diff(Simu[[isimu]]$bkp)
+Simu[[isimu]]$mu <- c(0, 14.64, -3.66, 7.32, -7.32, 10.98, -4.39, 
+                      3.29, 19.03,7.68, 15.37, 0)
+Simu[[isimu]]$sigma=10; 
+Simu[[isimu]]$signal <- rep(Simu[[isimu]]$mu, Simu[[isimu]]$Lg); 
+Simu[[isimu]]$Ktrue <- sum(diff(Simu[[isimu]]$signal)!=0)+1
+
+```
+
+The defintion of all other datasets is in the "StatDatasets.R" file.
+We source them below.
+
+```{r statdatasets}
+source("StatDatasets.R")
+```
+
+### An example profile for each dataset
+
+We know simulate and plot a profile for each dataset.
+
+```{r plot_dataset, fig.width=4, fig.height=3.4}
+
+## 
+type.errors <- c("Gauss", "Stud-10")
+rSimu <- function(sim, type.error="Gauss"){
+  if(type.error == "Gauss"){
+    x <- rep(sim$mu, sim$Lg) + rnorm(sum(sim$Lg), sd=sim$sigma)
+  }
+  if(type.error =="Stud-10"){
+    dfree <- 10
+    x <- rep(sim$mu, sim$Lg) 
+    x <- x + rt(n=length(x), df=dfree)*sim$sigma
+  }
+  return(x)
+}
+
+for(sim in Simu){
+  x <- rSimu(sim, type.error="Gauss")
+  plot(x, pch=20, col="blue", lty=2, main=sim$Name, cex=0.3, xlab="", ylab="")
+  abline(v=sim$bkp, lty=2)
+  segments(x0=sim$bkp[-length(sim$bkp)], y0=sim$mu, sim$bkp[-1], col="red", lwd=2)
+}
+
+
+```
+
+### Larger datasets 
+
+Finally we consider a few more datasets extending the previous one by
+multiplying the length of each segment by $\alpha$ and dividing the standard 
+deviation by $\sqrt(\alpha)$. We use $\alpha=3$ and $\alpha=10$
+This is done in the following script.
+
+```{r extended_datasets}
+one_Extend_Simu_Lg <- function(sim, alpha){
+  sim$bkp    <- sim$bkp*alpha
+  sim$Lg     <- diff(sim$bkp)
+  sim$sigma  <- sim$sigma*sqrt(alpha)
+  sim$signal <- rep(sim$mu, sim$Lg); 
+  sim$Name   <- paste0(gsub(",.*", "", sim$Name), ", x", alpha, ", K=", sim$Ktrue, ", n=", length(sim$signal))
+  return(sim)
+}
+
+Simu_Ext <- lapply(Simu, FUN=function(sim, alphas=c(1, 3, 10)){
+  new_sim <- lapply(alphas, FUN=one_Extend_Simu_Lg, sim=sim)
+  return(new_sim)
+})
+
+```
+
+### Simulation
+
+We now simulate a number (10) profile per dataset and store them in RData.
+```{r simulation_save}
+set.seed(100)
+storeSim <- function(sim, type.error, ns=nb_simu_per_dataset){
+  file_sim <- paste0("Simu_Profile/Error=", type.error, "_", gsub(",[ ]", "_", sim$Name), ".RData")
+  ## generate dataset if not already done
+  if(!file.exists(file_sim)){
+    data_sim <- replicate(ns, rSimu(sim, type.error=type.error))
+    save(data_sim, file=file_sim, compress = TRUE)
+  }
+}
+
+## This is about 110 Mo for alpha 1, 3, 100 and one type of error
+for(type.error in type.errors){
+for(sim_ext in Simu_Ext){
+  lapply(sim_ext, FUN=storeSim, type.error=type.error)
+}}
+
+```
+
+
+### Prior scaling 
+
+Before we analyze any profile with any given segmentation method we scale it using
+a differenced-based estimation of the variance (relying on the MAD).
+The code is below.
+
+```{r normalize_variance}
+varDiff <- function(x, method='MAD'){
+  n = length(x)
+  if(method == "MAD"){
+	return(mad(diff(x)/sqrt(2)))	
+  }
+  if(method == "HALL"){
+    wei <- c(0.1942, 0.2809, 0.3832, -0.8582)
+    mat <- wei %*% t(x)
+    mat[2, -n] = mat[2, -1]
+    mat[3, -c(n-1, n)] = mat[3, -c(1, 2)]
+    mat[4, -c(n-2, n-1, n)] = mat[4, -c(1, 2, 3)]   
+    return(sqrt(sum(apply(mat[, -c(n-2, n-1, n)], 2, sum)^2) / (n-3)))
+  }
+}
+
+```
+
+## Segmentation Approaches
+
+We provide some code for various segmentation approaches.
+
+```{r}
+Seg.method <- list()
+i <- 0
+```
+
+
+
+### PELT
+
+#### PELT default
+
+```{r PELT_Default_MBIC}
+i <- i+1
+library(changepoint)
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "Plt-Def"
+Seg.method[[i]]$FUN <- function(x){
+  w <- cpt.mean(x,method="PELT")
+  w.cpt <- c(cpts(w), length(x))
+     
+  return(list(cpt=w.cpt))
+}
+
+```
+
+#### PELT mBIC
+
+```{r PELT_MBIC}
+i <- i+1
+library(changepoint)
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "Plt-Mbic"
+Seg.method[[i]]$FUN <- function(x){
+    sumstat<-matrix(c(cumsum(c(0,x)),cumsum(c(0,x^2)),cumsum(c(0,(x-mean(x))^2))),ncol=3)
+    w<-PELT(sumstat,pen=2*log(length(x)),cost_func="mean.norm.mbic")
+    return(list(cpt=w$cpts))   
+}
+```
+
+
+
+```
+
+
+### FPOP
+
+#### FPOP-2log(n)
+```{r FPOP_default}
+i <- i+1
+library(fpop)
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "Fpop-Def"
+Seg.method[[i]]$FUN <- function(x){
+  penalty <- 2*log(length(x))
+  res <- Fpop(x, lambda=penalty)
+  return( list(cpt=res$t.est) )
+}
+
+```
+
+#### RFPOP-2log(n)
+```{r RFPOP_default}
+i <- i+1
+library(robseg)
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "RFpop-Def"
+Seg.method[[i]]$FUN <- function(x){
+  penalty <- 2*log(length(x))
+  res <- Rob_seg.std(x, loss="Outlier", lambda=penalty, lthreshold = 3)
+  return( list(cpt=res$t.est) )
+}
+
+```
+
+
+#### FPOP-CROPS-Cap
+
+```{r FPOP_CROPS-Cap}
+
+#i <- i+1
+#source("CROPs.R")
+#Seg.method[[i]] <- list()
+#Seg.method[[i]]$Name <- "Fpop-Cr-Cp"
+#Seg.method[[i]]$FUN <- function(x){
+#  n <- length(x)
+#  res <- CROPS.FPOP(x, min=2,max=10*log(length(x)))
+#  dataCapushe <- data.frame(name=res[[1]][3,],
+#              pen.shape=lchoose(n-1,res[[1]][3,]),
+#              complexity=res[[1]][3,], contrast=res[[1]][4,])
+#  KC <- try(DDSE(dataCapushe))
+#  KJ <- Djump(dataCapushe)
+#  if(class(KC) == "try-error"){ K <- as.integer(KJ@model) } else { K <- as.integer(KC@model) }
+#  index=(1:dim(res[[1]])[2])[res[[1]][3,]==K]
+  
+#  return( list(cpt=res[[2]][[index]]) )
+#}
+
+```
+
+### FDRseg
+
+
+#### Smuce default
+
+```{r SmuceR_Default}
+
+i <- i+1
+library(FDRSeg)
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "FDRS-Smu"
+Seg.method[[i]]$FUN <- function(x){
+   if(length(x) <= 8000){
+  res <- smuce(x)
+  cpt <- c(res$left[-1]-1, length(x))
+  return( list(cpt=cpt) ) } else {
+  return( list(cpt=length(x)) )  }
+}
+
+```
+
+#### FDRSeg Default
+
+Not that for now we run FDRseg up $n=4000$.
+For longer profiles is to slow for the debugging phase.
+For longer profiles we simply output a 1 segment segmentation.
+
+```{r FDRSeg_Default}
+## as fdrseg is sometimes a bit long
+## for the draft version only small profiles (less than 2000 datapoints)
+## are analysed
+i <- i+1
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "FDRS-Def"
+Seg.method[[i]]$FUN <- function(x){
+  if(length(x) <= 4000){
+  res <- fdrseg(x)
+  cpt <- c(res$left[-1]-1, length(x))
+  return( list(cpt=cpt) )
+  } else {
+  return( list(cpt=length(x)) )  
+  }
+}
+
+```
+
+
+#### FDRSeg alpha=0.01
+
+
+
+```{r FDRSeg_001}
+
+#i <- i+1
+#Seg.method[[i]] <- list()
+#Seg.method[[i]]$Name <- "FDRS-0.01"
+#Seg.method[[i]]$FUN <- function(x){
+#  res <- fdrseg(x, alpha=0.01)
+#  cpt <- c(res$left[-1]-1, length(x))
+#  return( list(cpt=cpt) )
+
+#}
+
+```
+
+### pDPA/Fpsn + Capushe
+
+#### Fpsn Kmax=100
+
+```{r pDPA_Capushe_100}
+i <- i+1
+library(jointseg)
+library(capushe)
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "Fpsn-100"
+Seg.method[[i]]$FUN <- function(x){
+  Kmax <- min(trunc(length(x)/3), 100)
+  res <- Fpsn(x, Kmax=Kmax)
+  n <- length(x)
+  dataCapushe <- data.frame(name=1:Kmax, 
+              pen.shape=lchoose(n-1,0:(Kmax-1)), 
+              complexity=1:Kmax, contrast=res$J.est)
+  KC <- try(DDSE(dataCapushe))
+  KJ <- Djump(dataCapushe)
+  if(class(KC) == "try-error"){ K <- as.integer(KJ@model) } else { K <- as.integer(KC@model) }
+ 
+  return( list(cpt=res$t.est[K, 1:K]) )
+}
+
+```
+
+#### Fpsn Kmax=400
+
+```{r pDPA_Capushe_400}
+i <- i+1
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "Fpsn-400"
+Seg.method[[i]]$FUN <- function(x){
+  Kmax <- min(trunc(length(x)/3 ), 400)
+  res <- Fpsn(x, Kmax=Kmax)
+  n <- length(x)
+  dataCapushe <- data.frame(name=1:Kmax,
+            pen.shape=lchoose(n-1,0:(Kmax-1)), 
+            complexity=1:Kmax, contrast=res$J.est)
+  
+  KC <- try(DDSE(dataCapushe))
+  KJ <- Djump(dataCapushe)
+  if(class(KC) == "try-error"){ K <- as.integer(KJ@model) } else { K <- as.integer(KC@model) }
+ 
+  return( list(cpt=res$t.est[K, 1:K]) )
+}
+
+```
+
+#### Fpsn Kmax=5\sqrt(n)
+
+```{r pDPA_Capushe_sqr}
+i <- i+1
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "Fpsn-sqr"
+Seg.method[[i]]$FUN <- function(x){
+  Kmax <- min(trunc(length(x)/3 ), trunc(5*sqrt(length(x))) )
+  res <- Fpsn(x, Kmax=Kmax)
+  n <- length(x)
+  dataCapushe <- data.frame(name=1:Kmax,
+            pen.shape=lchoose(n-1,0:(Kmax-1)), 
+            complexity=1:Kmax, contrast=res$J.est)
+  
+  KC <- try(DDSE(dataCapushe))
+  KJ <- Djump(dataCapushe)
+  if(class(KC) == "try-error"){ K <- as.integer(KJ@model) } else { K <- as.integer(KC@model) }
+ 
+  return( list(cpt=res$t.est[K, 1:K]) )
+}
+
+```
+
+
+
+
+### Segmentor 
+
+#### Kmax=100 
+
+```{r Seg_Default}
+
+i <- i+1
+library(Segmentor3IsBack)
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "S3I-100"
+Seg.method[[i]]$FUN <- function(x){
+  res <- Segmentor(x, model=2, Kmax=100)
+  K <- SelectModel(res)
+  cpt <- res@breaks[K, 1:K]
+  return( list(cpt=cpt) )
+}
+
+```
+
+### Breakfast
+
+#### TGUH
+
+```{r Tguh_default}
+i <- i+1
+library(breakfast)
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "Bft-Tgu"
+Seg.method[[i]]$FUN <- function(x){
+  w <- tguh.cpt(x)
+  w.cpt <- c(sort(w$cpt), length(x))
+  return(list(cpt=w.cpt))
+}
+
+```
+
+#### Hybrid approach
+```{r Hybrid_default}
+i <- i+1
+library(breakfast)
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "Bft-Hyb"
+Seg.method[[i]]$FUN <- function(x){
+  w <- hybrid.cpt(x)
+  w.cpt <- c(sort(w$cpt), length(x))
+  return(list(cpt=w.cpt))
+}
+
+```
+
+#### WBS 
+```{r wbs_breakfast}
+i <- i+1
+library(breakfast)
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "Bft-Wbs"
+Seg.method[[i]]$FUN <- function(x){
+  w <- wbs.cpt(x)
+  w.cpt <- c(sort(w$cpt), length(x))
+  return(list(cpt=w.cpt))
+}
+
+```
+
+### WBS
+
+#### WBS-sSIC
+```{r wbs_ssic}
+library(wbs)
+i <- i+1
+library(breakfast)
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "Wbs-Ssic"
+Seg.method[[i]]$FUN <- function(x){
+     w <- wbs(x)
+     w.cpt <- changepoints(w, penalty="ssic.penalty")
+     w.cpt <- w.cpt$cpt.ic$ssic.penalty
+     if(is.na(w.cpt[1])) w.cpt <- c() else { w.cpt <- sort(w.cpt)}
+
+     return( list( cpt=c(w.cpt, length(x)) ) )
+}
+
+```
+
+
+#### WBS-Threshold
+```{r wbs_thres_1}
+library(wbs)
+i <- i+1
+library(breakfast)
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "Wbs-Th1"
+Seg.method[[i]]$FUN <- function(x){
+     w <- wbs(x)
+     w.cpt <- changepoints(w)
+     w.cpt <- w.cpt$cpt.th[[1]]
+     if(is.na(w.cpt[1])) w.cpt <- c() else { w.cpt <- sort(w.cpt)}
+   return( list( cpt=c(w.cpt, length(x)) ) )
+}
+
+```
+
+#### SBS-Threshold
+```{r sbs_thres_1}
+library(wbs)
+i <- i+1
+library(breakfast)
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "Sbs-Th1"
+Seg.method[[i]]$FUN <- function(x){
+     w <- sbs(x)
+     w.cpt <- changepoints(w)
+     w.cpt <- w.cpt$cpt.th[[1]]
+     if(is.na(w.cpt[1])) w.cpt <- c() else { w.cpt <- sort(w.cpt)}
+   return( list( cpt=c(w.cpt, length(x)) ) )
+}
+
+```
+
+## Assesment measure
+
+We first define a set of functions to recover:
+
+- the true number of segments
+- the true segment of each datapoints
+- the true signal
+
+```{r trueSmt}
+############################
+trueK <- function(sim){
+  return(sim$Ktrue)
+}
+############################
+trueSeg <- function(sim){
+  rep(1:length(sim$mu), sim$Lg)
+}
+############################
+trueSmt <- function(sim){
+  rep(sim$mu, sim$Lg)
+}
+
+```
+
+We then define a set of functions to recover:
+
+- the estimated number of segments
+- the estimated segment of each datapoints
+- the estimated signal
+
+```{r predictedSmt}
+predictedK <- function(fit, x){
+  length(fit$cpt)
+}
+
+predictedSeg <- function(fit, x){
+  lgSeg <- diff(c(0, sort(fit$cpt)))
+  segNb <- rep(1:length(lgSeg), lgSeg)
+  return(segNb)
+}
+
+predictedSmt <- function(fit, x){
+  lgSeg <- diff(c(0, sort(fit$cpt)))
+  segNb <- rep(1:length(lgSeg), lgSeg)
+  smt <- rep(by(x, segNb, FUN=mean)[1:length(lgSeg)], lgSeg)
+  return(smt)
+}
+```
+
+### Number of segments
+
+We consider three simple statistics to assess whether
+any given method is able to recover the true number of segments:
+
+- selD: $\hat{K}-K^*$
+- selE: $\mathbb{I}_{\hat{K}=K^*}$
+- selMs: $\mathbb{I}_{\hat{K}<K^*}$
+- selPs: $\mathbb{I}_{\hat{K}>K^*}$
+
+```{r Khat}
+#########################################################
+selD <- function(sim, fit, x){
+  sc <- predictedK(fit, x) - trueK(sim)
+  names(sc) <- "selD"
+  return(sc)
+}
+#########################################################
+selE <- function(sim, fit, x){
+  sc <- predictedK(fit, x) == trueK(sim)
+  names(sc) <- "selE"
+  return(sc)
+}
+#########################################################
+selMs <- function(sim, fit, x){
+  sc <- predictedK(fit, x) < trueK(sim)
+  names(sc) <- "selMs"
+  return(sc)
+}
+#########################################################
+selPs <- function(sim, fit, x){
+  sc <- predictedK(fit, x) > trueK(sim)
+  names(sc) <- "selPs"
+  return(sc)
+}
+
+```
+
+### Mean-squared Error 
+
+Here is a function to compute the MSE and the MSE divided by the MSE
+obtained when considering only 1 segment (MSE_N).
+
+```{r MSE}
+#########################################################
+MSE <- function(sim, fit, x){
+  sc <- mean(  (trueSmt(sim) - predictedSmt(fit, x))^2  )
+  names(sc) <- "Mse"
+  return(sc)
+}
+#########################################################
+MSE_N <- function(sim, fit, x){
+  sc   <- mean(  (trueSmt(sim) - predictedSmt(fit, x))^2  )
+  sc_n <- mean(  (      x     -      mean(x)         )^2  )
+  sc <- sc/sc_n
+  names(sc) <- "Mse_N"
+  return(sc)
+}
+```
+
+### Segmentation scoring
+
+#### NID
+
+Here is a function to compute the NID (Normalize Information distance) between the true and estimated segmentation. A score 
+of 0 means a perfect match between the two.
+
+```{r nid_score}
+library(aricode)
+nidScore <- function(sim, fit, x){
+  if(trueK(sim) > 1){
+    sc <- NID(trueSeg(sim), predictedSeg(fit, x))
+  } else {
+    sc <- NA
+  }
+  names(sc) <- "Nid"
+  return(sc)
+}
+
+```
+
+#### ARI
+Here is a function to compute the ARI between the true and estimated segmentation. A score of 1 means a perfect match between the true
+and estimated segmentation.
+
+```{r ari_score}
+ariScore <- function(sim, fit, x){
+  if(trueK(sim) > 1){
+    sc <- ARI(trueSeg(sim), predictedSeg(fit, x))
+  } else {
+    sc <- NA
+  }
+  names(sc) <- "Ari"
+  return(sc)
+}
+```
+
+#### Froebenius norm 
+Here is a function to compute the Froebenius norm between the true and estimated segmentation. 
+
+```{r Fb_score}
+froebScore <- function(sim, fit, x){
+   
+ truesegment <- trueSeg(sim)
+ predsegment     <- predictedSeg(fit, x)
+ lseg        <- diff(c(0, fit$cpt))
+ i_order <- order(truesegment, predsegment, method = "radix") - 1L
+ #contingency <- table(truesegment, predsegment)
+ contingency <- sortPairs(truesegment, predsegment, spMat=TRUE)$spMat 
+ mattruesegment <- matrix(rep(sim$Lg, length(lseg)), ncol=length(lseg), byrow=FALSE)
+ matsegment <- matrix(rep(lseg, length(sim$Lg)), nrow=length(sim$Lg), byrow=TRUE)
+
+ 
+ part_Diff <- sum( contingency^2 * (1/mattruesegment - 1/matsegment)^2)
+ part_Zero_truesegment <-  trueK(sim) - sum( contingency^2 * (1/mattruesegment)^2)
+ part_Zero_segment <-predictedK(fit, x) - sum( contingency^2 * (1/matsegment)^2)
+
+ sc <- sqrt(part_Diff+part_Zero_truesegment+part_Zero_segment)
+  
+ 
+ names(sc) <- "Fb"
+ return(sc)
+}
+```
+
+
+
+### List of all scoring functions
+
+We make a list of all these scoring functions.
+
+```{r all_scores}
+Score.fun <- list()
+i <- 1
+Score.fun[[i]] <- MSE            ; i <- i+1
+Score.fun[[i]] <- MSE_N          ; i <- i+1
+Score.fun[[i]] <- selE           ; i <- i+1
+Score.fun[[i]] <- froebScore     ; i <- i+1
+
+Score.fun[[i]] <- selD           ; i <- i+1
+Score.fun[[i]] <- selMs          ; i <- i+1
+Score.fun[[i]] <- selPs          ; i <- i+1
+Score.fun[[i]] <- nidScore       ; i <- i+1
+Score.fun[[i]] <- ariScore       ; i <- i+1
+
+```
+
+## Segmentation and scoring
+
+
+### Segmentation
+We run all approches and assess their performances.
+
+
+```{r load_simu_and_seg}
+## Basics all ~ 4h30 with mc.cores=4
+library(parallel)
+one_simu_seg <- function(sim, method, type.error){
+  file_sim <- paste0("Simu_Profile/Error=", type.error, "_", gsub(",[ ]", "_", sim$Name), ".RData")
+  file_seg <- paste0("Seg_Approach/Error=", type.error, "_", gsub(",[ ]", "_", sim$Name),  "_", method$Name, ".RData")
+
+  ## run the approach only if not run already
+  if(file.exists(file_sim)){
+  if(!file.exists(file_seg)){
+    load(file=file_sim)
+    output.met <- mclapply(1:ncol(data_sim), FUN=function(i){
+      x_ <- data_sim[, i]/varDiff(data_sim[, i])
+      runtime <- system.time(res <- method$FUN(x_))[3]
+      return(list(res=res, runtime=runtime))
+      }, mc.cores=mc.cores)
+  
+    save(output.met, file=file_seg)
+  
+  }} else {cat("Generate simulation dataset first")}
+}
+
+###  
+for(type.error in type.errors){
+  for(sim_ext in Simu_Ext){
+    for(met in Seg.method){
+      lapply(sim_ext, FUN=one_simu_seg, method=met, type.error=type.error)
+}}}
+
+```
+
+
+### Scoring
+```{r load_seg_and_score}
+
+one_simu_score <- function(sim, method, type.error, Score.fun_){
+  file_sim <- paste0("Simu_Profile/Error=", type.error, "_", gsub(",[ ]", "_", sim$Name), ".RData")
+  file_seg <- paste0("Seg_Approach/Error=", type.error, "_", gsub(",[ ]", "_", sim$Name),  "_", method$Name, ".RData")
+  file_sco <- paste0("Sco_Approach/Error=", type.error, "_", gsub(",[ ]", "_", sim$Name),  "_", method$Name, ".RData")
+  ## run the approach only if not run already
+  if(file.exists(file_seg)){
+  if(!file.exists(file_sco)){
+    load(file=file_seg)
+    load(file=file_sim)
+    
+    output.sco <- do.call(rbind, 
+        mclapply(1:length(output.met), FUN=function(i){
+          x <- c(i, output.met[[i]]$runtime, sapply(Score.fun_, FUN=function(fun) 
+                fun(sim=sim, fit=output.met[[i]]$res, x=data_sim[, i])))
+         
+          names(x)[1:2] <- c("sim_num", "t")
+          return(x)
+        }, mc.cores=mc.cores) 
+    )
+    
+    save(output.sco, file=file_sco)
+  
+  }} else {cat("Run segmentation first")}
+}
+
+
+##
+
+
+## 
+for(type.error in type.errors){
+  for(sim_ext in Simu_Ext){
+    for(met in Seg.method){
+      lapply(sim_ext, FUN=one_simu_score, method=met, type.error=type.error, Score.fun_=Score.fun)
+    }}}
+
+```
+
+### Summarized results
+
+#### Gaussian errors
+
+```{r table_summarization_gauss, results='asis'}
+library(knitr)
+library(kableExtra)
+
+one_load_aggregate <- function(sim, method, type.error){
+  file_sco <- paste0("Sco_Approach/Error=", type.error, "_", gsub(",[ ]", "_", sim$Name),  "_", method$Name, ".RData")
+  load(file_sco)
+  data.frame(met=method$Name, t(signif(colMeans(output.sco[, c(2, 3, 5)]),2)))
+}
+
+all_load_aggregate <- function(sim, Seg.method_, type.error){
+  do.call(rbind, lapply(Seg.method_, FUN=function(met) one_load_aggregate(sim=sim, method=met, type.erro=type.error)))
+}
+
+sim <- Simu_Ext[[2]][[1]]
+i <- 1
+while(i <= length(Seg.method)) {
+  one_load_aggregate(sim, Seg.method[[i]], "Gauss")
+  i <- i+1
+}
+
+type.error <- "Gauss"
+for(sim_ext in Simu_Ext){
+    nb_lg <- length(sim_ext)
+    data_to_show <- lapply(sim_ext, FUN=function(sim) all_load_aggregate(sim, Seg.method_=Seg.method, type.error=type.error))
+    nb_so <- ncol(data_to_show[[1]])
+    icol <- rep(2:nb_so, each=nb_lg) + ((1:nb_lg) -1)*nb_so
+    subname <- sapply(sim_ext, FUN=function(sim) paste0("_(x", gsub(".*x|,.*", "", sim$Name), ")"))
+    for(i in 1:length(sim_ext)){
+      colnames(data_to_show[[i]]) <- paste0(colnames(data_to_show[[i]]), subname[i])
+    }
+    data_to_show <- do.call(cbind, data_to_show)[, c(1, icol)]
+    colnames(data_to_show)[1] <- "Met"
+
+     essai <- kable(data_to_show, row.names = FALSE,  align="c", format="html", caption=paste0(sim_ext[[1]]$Name, ", Gauss") ) %>%
+              kable_styling(bootstrap_options = c("hover", "striped")) %>%
+              add_header_above(c(" " = 1, "Time" = nb_lg, "MSE" = nb_lg, "E(K=K*)" = nb_lg)) %>%
+              column_spec((1:nb_lg-1)*nb_lg+1, border_right = T) %>%
+             row_spec(c(6, 11, 13), bold = T, color = "white", background = "#D7261E")
+     print(essai)
+  }
+    
+```
+
+#### Student error
+```{r table_summarization_stu-10, results='asis'}
+type.error <- "Stud-10"
+for(sim_ext in Simu_Ext){
+
+    #print(sim$Name)
+    
+    nb_lg <- length(sim_ext)
+    data_to_show <- lapply(sim_ext, FUN=function(sim) all_load_aggregate(sim, Seg.method_=Seg.method, type.error=type.error))
+    nb_so <- ncol(data_to_show[[1]])
+    icol <- rep(2:nb_so, each=nb_lg) + ((1:nb_lg) -1)*nb_so
+    subname <- sapply(sim_ext, FUN=function(sim) paste0("_(x", gsub(".*x|,.*", "", sim$Name), ")"))
+    for(i in 1:length(sim_ext)){
+      colnames(data_to_show[[i]]) <- paste0(colnames(data_to_show[[i]]), subname[i])
+    }
+    data_to_show <- do.call(cbind, data_to_show)[, c(1, icol)]
+    colnames(data_to_show)[1] <- "Met"
+  
+  
+    essai <- kable(data_to_show, row.names = FALSE,  align="c", format="html", caption=paste0(sim_ext[[1]]$Name, ", Student df=10")) %>% 
+             kable_styling(bootstrap_options = c("hover")) %>%
+             add_header_above(c(" " = 1, "Time" = nb_lg, "MSE" = nb_lg, "E(K=K*)" = nb_lg)) %>%
+             column_spec((1:nb_lg-1)*nb_lg+1, border_right = T) %>%
+             row_spec(c(6, 11, 13), bold = T, color = "white", background = "#D7261E")
+    print(essai)
+  }
+    
+```
+    
+### Plots
