@@ -85,9 +85,9 @@ rSimu <- function(sim, type.error="Gauss"){
     x <- x + rt(n=length(x), df=dfree)*sim$sigma
   }
   if(type.error =="ARMA"){
-    x <- rep(sim$mu, sim$Lg) 
-    x <- x + arima.sim(arima.model,n=length(x))*sim$sigma
-  }
+    x <- rep(sim$mu, sim$Lg) 
+    x <- x + arima.sim(arima.model,n=length(x))*sim$sigma
+  }
   
   return(x)
 }
