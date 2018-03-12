@@ -18,7 +18,7 @@ This is a draft.
 
 ```{r}
 mc.cores=4
-nb_simu_per_dataset=100
+nb_simu_per_dataset=10
 ```
 
 ## Simulated datasets
@@ -69,7 +69,12 @@ We know simulate and plot a profile for each dataset.
 ```{r plot_dataset, fig.width=4, fig.height=3.4}
 
 ## 
-type.errors <- c("Gauss", "Stud-10")
+library(stats)
+arima.model=list(order=c(1,0,0),ar=0.3) ##could embed the Gauss/students-t within this.
+##order=c(p,0,q) AR(p) MA(q); so this is AR(1) with coefficient 0.3
+
+#type.errors <- c("Gauss", "Stud-10","ARMA")
+type.errors <- c("Gauss,"ARMA")
 rSimu <- function(sim, type.error="Gauss"){
   if(type.error == "Gauss"){
     x <- rep(sim$mu, sim$Lg) + rnorm(sum(sim$Lg), sd=sim$sigma)
@@ -79,6 +84,11 @@ rSimu <- function(sim, type.error="Gauss"){
     x <- rep(sim$mu, sim$Lg) 
     x <- x + rt(n=length(x), df=dfree)*sim$sigma
   }
+  if(type.error =="ARMA"){
+    x <- rep(sim$mu, sim$Lg) 
+    x <- x + arima.sim(arima.model,n=length(x))*sim$sigma
+  }
+  
   return(x)
 }
 
@@ -206,13 +216,6 @@ Seg.method[[i]]$FUN <- function(x){
 }
 ```
 
-
-
-```
-
-
-### FPOP
-
 #### FPOP-2log(n)
 ```{r FPOP_default}
 i <- i+1
@@ -224,7 +227,6 @@ Seg.method[[i]]$FUN <- function(x){
   res <- Fpop(x, lambda=penalty)
   return( list(cpt=res$t.est) )
 }
-
 ```
 
 #### RFPOP-2log(n)
@@ -881,4 +883,3 @@ for(sim_ext in Simu_Ext){
     
 ```
     
-### Plots
