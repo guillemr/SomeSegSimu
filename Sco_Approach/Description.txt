@@ -1,0 +1,1 @@
+This subfolder is used to store the scores of all segmentation approaches in RData.

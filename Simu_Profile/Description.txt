@@ -1,0 +1,1 @@
+This subfolder is used to store the simulated profiles in .RData.
