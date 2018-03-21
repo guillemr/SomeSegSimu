@@ -1,7 +1,7 @@
 ---
-title: "Some changepoint simulation"
+title: "Some changepoint simulations"
 author: "P. Fearnhead & G. Rigaill"
-date: "15 février 2018"
+date: "21 Mars 2018"
 output:
   html_document:
     df_print: paged
