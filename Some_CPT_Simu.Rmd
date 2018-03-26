@@ -769,9 +769,9 @@ We run all approches and assess their performances.
 ```{r load_simu_and_seg}
 ## Basics all ~ 4h30 with mc.cores=4
 library(parallel)
-one_simu_seg <- function(sim, method, type.error){
-  file_sim <- paste0("Simu_Profile/Error=", type.error, "_", gsub(",[ ]", "_", sim$Name), ".RData")
-  file_seg <- paste0("Seg_Approach/Error=", type.error, "_", gsub(",[ ]", "_", sim$Name),  "_", method$Name, ".RData")
+one_simu_seg <- function(sim, method, noise){
+  file_sim <- paste0("Simu_Profile/Error=", noise$Name, "_", gsub(",[ ]", "_", sim$Name), ".RData")
+  file_seg <- paste0("Seg_Approach/Error=", noise$Name, "_", gsub(",[ ]", "_", sim$Name),  "_", method$Name, ".RData")
 
   ## run the approach only if not run already
   if(file.exists(file_sim)){
@@ -789,10 +789,10 @@ one_simu_seg <- function(sim, method, type.error){
 }
 
 ###  
-for(type.error in type.errors){
+for(noise in Noise){
   for(sim_ext in Simu_Ext){
     for(met in Seg.method){
-      lapply(sim_ext, FUN=one_simu_seg, method=met, type.error=type.error)
+      lapply(sim_ext, FUN=one_simu_seg, method=met, noise=noise)
 }}}
 
 ```
