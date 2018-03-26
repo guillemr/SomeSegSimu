@@ -62,6 +62,44 @@ We source them below.
 source("StatDatasets.R")
 ```
 
+Noise distributions
+
+```{r noise distributions}
+
+Noise <- list()
+inoise<-0
+
+inoise <- inoise +1
+
+Noise[[inoise]] <- list()
+Noise[[inoise]]$Name = "Gaussian"
+Noise[[inoise]]$arima = list(order=c(0,0,0))  ##uncorrelated noise
+Noise[[inoise]]$df=NULL ##Gaussian
+
+inoise <- inoise +1
+
+Noise[[inoise]] <- list()
+Noise[[inoise]]$Name = "t10"
+Noise[[inoise]]$arima = list(order=c(0,0,0))  ##uncorrelated noise
+Noise[[inoise]]$df=10 ##student-t df=10
+
+inoise <- inoise +1
+
+Noise[[inoise]] <- list()
+Noise[[inoise]]$Name = "GaussAR1"
+Noise[[inoise]]$arima = list(order=c(1,0,0), ar=0.3)  ##AR(1) correlation 0.3
+##order=c(p,0,q) AR(p) MA(q); so this is AR(1) with coefficient 0.3
+Noise[[inoise]]$df=NULL ##Gaussian
+
+inoise <- inoise +1
+
+Noise[[inoise]] <- list()
+Noise[[inoise]]$Name = "t10AR1"
+Noise[[inoise]]$arima = list(order=c(1,0,0), ar=0.3)  ##AR(1) correlation 0.3
+Noise[[inoise]]$df=10 ##student-t df=10
+
+```
+
 ### An example profile for each dataset
 
 We know simulate and plot a profile for each dataset.
@@ -70,30 +108,25 @@ We know simulate and plot a profile for each dataset.
 
 ## 
 library(stats)
-arima.model=list(order=c(1,0,0),ar=0.3) ##could embed the Gauss/students-t within this.
-##order=c(p,0,q) AR(p) MA(q); so this is AR(1) with coefficient 0.3
 
-#type.errors <- c("Gauss", "Stud-10","ARMA")
-type.errors <- c("Gauss,"ARMA")
-rSimu <- function(sim, type.error="Gauss"){
-  if(type.error == "Gauss"){
-    x <- rep(sim$mu, sim$Lg) + rnorm(sum(sim$Lg), sd=sim$sigma)
-  }
-  if(type.error =="Stud-10"){
-    dfree <- 10
+rSimu <- function(sim, arima.model,df=NULL){
+
     x <- rep(sim$mu, sim$Lg) 
-    x <- x + rt(n=length(x), df=dfree)*sim$sigma
-  }
-  if(type.error =="ARMA"){
-    x <- rep(sim$mu, sim$Lg) 
+  if(is.null(df)){
     x <- x + arima.sim(arima.model,n=length(x))*sim$sigma
+  }else{
+    if(df>2){
+	sd.fac=sqrt( (df-2)/df) ##normalise noise to variance 1 prior to multiplication by sim$sigma
+    }else{
+        sd.fac=1
+	}		
+    x <- x + arima.sim(arima.model,n=length(x),rand.gen=rt,df=df)*sd.fac*sim$sigma   
   }
-  
   return(x)
 }
 
 for(sim in Simu){
-  x <- rSimu(sim, type.error="Gauss")
+  x <- rSimu(sim, arima.model=Noise[[1]]$arima, df=Noise[[1]]$df)
   plot(x, pch=20, col="blue", lty=2, main=sim$Name, cex=0.3, xlab="", ylab="")
   abline(v=sim$bkp, lty=2)
   segments(x0=sim$bkp[-length(sim$bkp)], y0=sim$mu, sim$bkp[-1], col="red", lwd=2)
@@ -128,25 +161,23 @@ Simu_Ext <- lapply(Simu, FUN=function(sim, alphas=c(1, 3, 10)){
 
 ### Simulation
 
-We now simulate a number (10) profile per dataset and store them in RData.
+We now simulate a number (nb_simu_per_dataset) profile per dataset and store them in RData.
 ```{r simulation_save}
 set.seed(100)
-storeSim <- function(sim, type.error, ns=nb_simu_per_dataset){
+storeSim <- function(sim, noise, ns=nb_simu_per_dataset){
   file_sim <- paste0("Simu_Profile/Error=", type.error, "_", gsub(",[ ]", "_", sim$Name), ".RData")
   ## generate dataset if not already done
   if(!file.exists(file_sim)){
-    data_sim <- replicate(ns, rSimu(sim, type.error=type.error))
+    data_sim <- replicate(ns, rSimu(sim, noise$arima, noise$df))
     save(data_sim, file=file_sim, compress = TRUE)
   }
 }
 
 ## This is about 110 Mo for alpha 1, 3, 100 and one type of error
-for(type.error in type.errors){
+for(noise in Noise){
 for(sim_ext in Simu_Ext){
-  lapply(sim_ext, FUN=storeSim, type.error=type.error)
+  lapply(sim_ext, FUN=storeSim, noise=Noise)
 }}
-
-```
 
 
 ### Prior scaling 
@@ -250,6 +281,8 @@ Seg.method[[i]]$FUN <- function(x){
 
 i <- i+1
 source("CROPs.R")
+library(jointseg)
+library(capushe)
 Seg.method[[i]] <- list()
 Seg.method[[i]]$Name <- "Fpop-Cr-Cp"
 Seg.method[[i]]$FUN <- function(x){
