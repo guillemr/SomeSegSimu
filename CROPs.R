@@ -151,6 +151,9 @@ CROPS.RFPOP <- function(data,min_pen=5,max_pen=20) {
     for (b in 1:length(pen_interval)) {
       #ans <-  Fpop(data,pen_interval[b])
       ans <- Rob_seg.std(x, loss="Outlier", lambda=pen_interval[b], lthreshold = 3)
+      ## >> GR ADD FOR ROBSEG : compute unpenalized error
+      ans$J.est <- ans$cost[length(x)] - pen_interval[b]*length(ans$t.est)
+      ## << GR ADD FOR ROBSEG
       resultingcpts <- ans$t.est ##ERROR CORRECTED HERE
       new_numcpts[b] <- length(resultingcpts)-1
       cost.test <- array()
