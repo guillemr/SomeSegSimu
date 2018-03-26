@@ -319,6 +319,34 @@ Seg.method[[i]]$FUN <- function(x){
 }
 ```
 
+#### FPOP-CROPS-mBIC
+
+```{r FPOP_CROPS_mBIC}
+i <- i+1
+source("CROPs.R")
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "Fpop-CrmBIC"
+Seg.method[[i]]$FUN <- function(x){
+  n <- length(x)
+  res <- CROPS.FPOP(x, min= 1/20*log(length(x)), max=100*log(length(x)))
+  ## Capushe needs at least 10 models...
+  Ks        <- res[[1]][3,]
+  fit_value <- -0.5*res[[1]][4,]
+  pen_value1 <- sapply(Ks, FUN=function(K){
+     index <- (1:dim(res[[1]])[2])[res[[1]][3,]==K]
+     cpt   <- res[[2]][[index]]
+     lg <- diff(c(0, cpt))
+     return(-0.5* sum(log(lg[!is.na(lg)])))
+  })
+  pen_value2 <- 0.5-(Ks)*log(n)     
+ 
+  K <- Ks[which.max(fit_value+pen_value1+pen_value2)]
+  index=(1:dim(res[[1]])[2])[res[[1]][3,]==K]
+
+  return( list(cpt=res[[2]][[index]]) )
+}
+```
+
 #### RFPOP-CROPS-Cap
 
 ```{r RFPOP_CROPS_Cap}
@@ -443,6 +471,33 @@ Seg.method[[i]]$FUN <- function(x){
   KJ <- Djump(dataCapushe)
   if(class(KC) == "try-error"){ K <- as.integer(KJ@model) } else { K <- as.integer(KC@model) }
 
+  return( list(cpt=res$t.est[K, 1:K]) )
+}
+
+```
+
+#### Fpsn mBIC Kmax=400
+
+Here we use the mBIC after L2 optimisation.
+
+```{r pDPA_mBIC_400}
+i <- i+1
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "Fpsn-mBIC_400"
+Seg.method[[i]]$FUN <- function(x){
+  Kmax <- min(trunc(length(x)/3 ), 400)
+  res <- Fpsn(x, Kmax=Kmax)
+  n <- length(x)
+  ## assuming sigma=1
+  ## mBIC not during optimisation but post
+  fit_value <- -0.5*res$J.est 
+  pen_value1 <- apply(res$t.est, 1, FUN=function(x) {
+      lg <- diff(c(0, x))
+     -0.5* sum(log(lg[!is.na(lg)]))
+     })
+  pen_value2 <- 0.5-(1:Kmax)*log(n)     
+  
+  K <- which.max(fit_value+pen_value1+pen_value2)
   return( list(cpt=res$t.est[K, 1:K]) )
 }
 
@@ -918,8 +973,8 @@ for(sim_ext in Simu_Ext){
                     caption=paste0(sim_ext[[1]]$Name, ", ", Sim.method[[1]]$Name) ) %>%
               kable_styling(bootstrap_options = c("hover", "striped")) %>%
               add_header_above(c(" " = 1, "Time" = nb_lg, "MSE" = nb_lg, "E(K=K*)" = nb_lg, "ARI" = nb_lg)) %>%
-              column_spec((1:nb_so-1)*nb_lg+1, border_right = T) 
-              #%>% row_spec(c(1, 4), bold = T, color = "white", background = "#D7261E")
+              column_spec((1:nb_so-1)*nb_lg+1, border_right = T) %>% 
+              row_spec(c(1, 6, 10), bold = T, color = "white", background = "#D7261E")
      print(essai)
   }
     
@@ -947,8 +1002,8 @@ for(sim_ext in Simu_Ext){
                     caption=paste0(sim_ext[[1]]$Name, ", ", Sim.method[[2]]$Name) ) %>%
               kable_styling(bootstrap_options = c("hover", "striped")) %>%
               add_header_above(c(" " = 1, "Time" = nb_lg, "MSE" = nb_lg, "E(K=K*)" = nb_lg, "ARI" = nb_lg)) %>%
-              column_spec((1:nb_so-1)*nb_lg+1, border_right = T) 
-              #%>% row_spec(c(1, 4), bold = T, color = "white", background = "#D7261E")
+              column_spec((1:nb_so-1)*nb_lg+1, border_right = T) %>% 
+              row_spec(c(1, 6, 10), bold = T, color = "white", background = "#D7261E")
      print(essai)
   }
     
@@ -976,8 +1031,8 @@ for(sim_ext in Simu_Ext){
                     caption=paste0(sim_ext[[1]]$Name, ", ", Sim.method[[3]]$Name) ) %>%
               kable_styling(bootstrap_options = c("hover", "striped")) %>%
               add_header_above(c(" " = 1, "Time" = nb_lg, "MSE" = nb_lg, "E(K=K*)" = nb_lg, "ARI" = nb_lg)) %>%
-              column_spec((1:nb_so-1)*nb_lg+1, border_right = T) 
-              #%>% row_spec(c(1, 4), bold = T, color = "white", background = "#D7261E")
+              column_spec((1:nb_so-1)*nb_lg+1, border_right = T)  %>% 
+              row_spec(c(1, 6, 10), bold = T, color = "white", background = "#D7261E")
      print(essai)
   }
 ```
