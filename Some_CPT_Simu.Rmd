@@ -1,7 +1,7 @@
 ---
 title: "Some changepoint simulations"
 author: "P. Fearnhead & G. Rigaill"
-date: "26 Mars 2018"
+date: "26 Sep 2018"
 output:
   html_document:
     df_print: paged
@@ -156,7 +156,7 @@ one_Extend_Simu_Lg <- function(sim_, alpha_){
   return(sim_)
 }
 
-Simu_Ext <- lapply(Simu, FUN=function(sim_, alphas_=c(1, 3, 10)){
+Simu_Ext <- lapply(Simu, FUN=function(sim_, alphas_=c(1, 2)){
   new_sim <- lapply(alphas_, FUN=one_Extend_Simu_Lg, sim=sim_)
   return(new_sim)
 })
@@ -227,31 +227,31 @@ i <- 0
 #### PELT default
 
 ```{r PELT_Default_MBIC}
-# i <- i+1
-# library(changepoint)
-# Seg.method[[i]] <- list()
-# Seg.method[[i]]$Name <- "Plt-Def"
-# Seg.method[[i]]$FUN <- function(x){
-#   w <- cpt.mean(x,method="PELT")
-#   w.cpt <- c(cpts(w), length(x))
-#      
-#   return(list(cpt=w.cpt))
-# }
+ i <- i+1
+ library(changepoint)
+ Seg.method[[i]] <- list()
+ Seg.method[[i]]$Name <- "Plt-Def"
+ Seg.method[[i]]$FUN <- function(x){
+   w <- cpt.mean(x,method="PELT")
+   w.cpt <- c(cpts(w), length(x))
+      
+   return(list(cpt=w.cpt))
+ }
 
 ```
 
 #### PELT mBIC
 
 ```{r PELT_MBIC}
-# i <- i+1
-# library(changepoint)
-# Seg.method[[i]] <- list()
-# Seg.method[[i]]$Name <- "Plt-Mbic"
-# Seg.method[[i]]$FUN <- function(x){
-#     sumstat<-matrix(c(cumsum(c(0,x)),cumsum(c(0,x^2)),cumsum(c(0,(x-mean(x))^2))),ncol=3)
-#     w<-PELT(sumstat,pen=2*log(length(x)),cost_func="mean.norm.mbic")
-#     return(list(cpt=w$cpts))
-# }
+ i <- i+1
+ library(changepoint)
+ Seg.method[[i]] <- list()
+ Seg.method[[i]]$Name <- "Plt.mbic.cor"
+ Seg.method[[i]]$FUN <- function(x){
+     sumstat<-matrix(c(cumsum(c(0,x)),cumsum(c(0,x^2)),cumsum(c(0,(x-mean(x))^2))),ncol=3)
+     w <-PELT(sumstat,pen=2*log(length(x)),cost_func="mean.norm.mbic")
+     return(list(cpt=w$cpts))
+ }
 ```
 
 ### FPOP
@@ -304,10 +304,10 @@ Seg.method[[i]]$FUN <- function(x){
   complexity=res[[1]][3,], contrast=res[[1]][4,])
 
   dataCapushe <- dataCapushe[order(dataCapushe$name), ]
-  dataCapushe <- dataCapushe[dataCapushe$name <= (n/2 -2), ]
+  dataCapushe <- dataCapushe[dataCapushe$name <= max(100, n/2 - 2), ]
   ## no big cap in terms of K...
-  ie <- which(dataCapushe$name <= 500)
-  dataCapushe <- dataCapushe[ie , ]
+  #ie <- which(dataCapushe$name <= 500)
+  #dataCapushe <- dataCapushe[ie , ]
 
 
   KC <- try(DDSE(dataCapushe, pct=0.2))
@@ -322,29 +322,29 @@ Seg.method[[i]]$FUN <- function(x){
 #### FPOP-CROPS-mBIC
 
 ```{r FPOP_CROPS_mBIC}
-i <- i+1
-source("CROPs.R")
-Seg.method[[i]] <- list()
-Seg.method[[i]]$Name <- "Fpop-CrmBIC"
-Seg.method[[i]]$FUN <- function(x){
-  n <- length(x)
-  res <- CROPS.FPOP(x, min= 1/20*log(length(x)), max=100*log(length(x)))
-  ## Capushe needs at least 10 models...
-  Ks        <- res[[1]][3,]
-  fit_value <- -0.5*res[[1]][4,]
-  pen_value1 <- sapply(Ks, FUN=function(K){
-     index <- (1:dim(res[[1]])[2])[res[[1]][3,]==K]
-     cpt   <- res[[2]][[index]]
-     lg <- diff(c(0, cpt))
-     return(-0.5* sum(log(lg[!is.na(lg)])))
-  })
-  pen_value2 <- 0.5-(Ks)*log(n)     
- 
-  K <- Ks[which.max(fit_value+pen_value1+pen_value2)]
-  index=(1:dim(res[[1]])[2])[res[[1]][3,]==K]
-
-  return( list(cpt=res[[2]][[index]]) )
-}
+#i <- i+1
+# source("CROPs.R")
+# Seg.method[[i]] <- list()
+# Seg.method[[i]]$Name <- "Fpop-CrmBIC"
+# Seg.method[[i]]$FUN <- function(x){
+#   n <- length(x)
+#   res <- CROPS.FPOP(x, min= 1/20*log(length(x)), max=100*log(length(x)))
+#   ## Capushe needs at least 10 models...
+#   Ks        <- res[[1]][3,]
+#   fit_value <- -0.5*res[[1]][4,]
+#   pen_value1 <- sapply(Ks, FUN=function(K){
+#      index <- (1:dim(res[[1]])[2])[res[[1]][3,]==K]
+#      cpt   <- res[[2]][[index]]
+#      lg <- diff(c(0, cpt))
+#      return(-0.5* sum(log(lg[!is.na(lg)])))
+#   })
+#   pen_value2 <- 0.5-(Ks)*log(n)     
+#  
+#   K <- Ks[which.max(fit_value+pen_value1+pen_value2)]
+#   index=(1:dim(res[[1]])[2])[res[[1]][3,]==K]
+# 
+#   return( list(cpt=res[[2]][[index]]) )
+# }
 ```
 
 #### RFPOP-CROPS-Cap
@@ -380,52 +380,6 @@ Seg.method[[i]]$FUN <- function(x){
 # }
 ```
 
-### FDRseg
-
-
-#### Smuce default
-
-```{r SmuceR_Default}
-
-i <- i+1
-library(FDRSeg)
-Seg.method[[i]] <- list()
-Seg.method[[i]]$Name <- "FDRS-Smu"
-Seg.method[[i]]$FUN <- function(x){
-   if(length(x) <= 8000){
-  res <- smuce(x)
-  cpt <- c(res$left[-1]-1, length(x))
-  return( list(cpt=cpt) ) } else {
-  return( list(cpt=length(x)) )  }
-}
-
-```
-
-#### FDRSeg Default
-
-Not that for now we run FDRseg up $n=4000$.
-For longer profiles is to slow for the debugging phase.
-For longer profiles we simply output a 1 segment segmentation.
-
-```{r FDRSeg_Default}
-# as fdrseg is sometimes a bit long
-# for the draft version only small profiles (less than 2000 datapoints)
-# are analysed
-i <- i+1
-Seg.method[[i]] <- list()
-Seg.method[[i]]$Name <- "FDRS-Def"
-Seg.method[[i]]$FUN <- function(x){
- if(length(x) <= 4000){
- res <- fdrseg(x)
- cpt <- c(res$left[-1]-1, length(x))
- return( list(cpt=cpt) )
- } else {
- return( list(cpt=length(x)) )
- }
-}
-
-```
-
 
 ### pDPA/Fpsn + Capushe
 
@@ -453,34 +407,12 @@ Seg.method[[i]]$FUN <- function(x){
 
 ```
 
-#### Fpsn Kmax=400
-
-```{r pDPA_Capushe_400}
-i <- i+1
-Seg.method[[i]] <- list()
-Seg.method[[i]]$Name <- "Fpsn-400"
-Seg.method[[i]]$FUN <- function(x){
-  Kmax <- min(trunc(length(x)/3 ), 400)
-  res <- Fpsn(x, Kmax=Kmax)
-  n <- length(x)
-  dataCapushe <- data.frame(name=1:Kmax,
-            pen.shape=lchoose(n-1,0:(Kmax-1)),
-            complexity=1:Kmax, contrast=res$J.est)
-
-  KC <- try(DDSE(dataCapushe, pct=0.2))
-  KJ <- Djump(dataCapushe)
-  if(class(KC) == "try-error"){ K <- as.integer(KJ@model) } else { K <- as.integer(KC@model) }
-
-  return( list(cpt=res$t.est[K, 1:K]) )
-}
-
-```
 
 #### Fpsn mBIC Kmax=400
 
 Here we use the mBIC after L2 optimisation.
 
-```{r pDPA_mBIC_400}
+```{r pDPA_mBIC_800}
 i <- i+1
 Seg.method[[i]] <- list()
 Seg.method[[i]]$Name <- "Fpsn-mBIC_400"
@@ -503,50 +435,65 @@ Seg.method[[i]]$FUN <- function(x){
 
 ```
 
-#### Fpsn Kmax=5\sqrt(n)
 
-```{r pDPA_Capushe_sqr}
-#i <- i+1
-#Seg.method[[i]] <- list()
-#Seg.method[[i]]$Name <- "Fpsn-sqr"
-#Seg.method[[i]]$FUN <- function(x){
-#  Kmax <- min(trunc(length(x)/3 ), trunc(5*sqrt(length(x))) )
-#  res <- Fpsn(x, Kmax=Kmax)
-#  n <- length(x)
-#  dataCapushe <- data.frame(name=1:Kmax,
-#            pen.shape=lchoose(n-1,0:(Kmax-1)), 
-#            complexity=1:Kmax, contrast=res$J.est)
-  
-#  KC <- try(DDSE(dataCapushe))
-#  KJ <- Djump(dataCapushe)
-#  if(class(KC) == "try-error"){ K <- as.integer(KJ@model) } else { K <- as.integer(KC@model) }
+### Simple BS
+
+```{r BS_default}
+i <- i+1
+library(fpop)
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "BS-2log(n)"
+Seg.method[[i]]$FUN <- function(x){
+  n <- length(x)
  
-#  return( list(cpt=res$t.est[K, 1:K]) )
-#}
+  
+  res <- multiBinSeg(x, Kmax=n-1)
+  J.est <- c(0, cumsum(res$J.est)) + 2*log(n)*(1:n)
+  k <- which.min(J.est)
+  
+  if(k > 2){
+    t.est <- c(sort(res$t.est[1:k]), n)
+  } else { t.est <- n}
+  
+  
+  return( list(cpt=t.est) )
+}
+```
+
+### FDRseg
+
+Not that for now we run FDRseg up $n=4000$.
+For longer profiles is to slow for the debugging phase.
+For longer profiles we simply output a 1 segment segmentation.
+
+```{r FDRSeg_Default}
+
+library(FDRSeg)
+i <- i+1
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "FDRS-Def"
+Seg.method[[i]]$FUN <- function(x){
+ ## first load quantile if available if not run simu
+ n <- length(x)
+ file.quantile <- paste("Simu_FDRseg/fdrseg_qtl", n, ".RData", sep="")
+ if(!file.exists(file.quantile)){
+   alpha <- 0.1
+   r = round(50/min(alpha, 1 - alpha))
+   qtl.fdrseg <- simulQuantile(1 - alpha, n, r, "fdrseg")
+   save(qtl.fdrseg, file=file.quantile) 
+ } 
+ load(file.quantile)
+ 
+ ## segmentation
+ res <- fdrseg(x, q=qtl.fdrseg)
+ cpt <- c(res$left[-1]-1, length(x))
+ return( list(cpt=cpt) )
+ 
+ 
+}
 
 ```
 
-
-
-
-### Segmentor 
-
-#### Kmax=100 
-
-```{r Seg_Default}
-
-#i <- i+1
-#library(Segmentor3IsBack)
-#Seg.method[[i]] <- list()
-#Seg.method[[i]]$Name <- "S3I-100"
-#Seg.method[[i]]$FUN <- function(x){
-#  res <- Segmentor(x, model=2, Kmax=100)
-#  K <- SelectModel(res)
-#  cpt <- res@breaks[K, 1:K]
-#  return( list(cpt=cpt) )
-#}
-
-```
 
 ### Breakfast
 
@@ -635,22 +582,7 @@ Seg.method[[i]]$FUN <- function(x){
 
 ```
 
-#### SBS-Threshold
-```{r sbs_thres_1}
-library(wbs)
-i <- i+1
-library(breakfast)
-Seg.method[[i]] <- list()
-Seg.method[[i]]$Name <- "Sbs-Th1"
-Seg.method[[i]]$FUN <- function(x){
-     w <- sbs(x)
-     w.cpt <- changepoints(w)
-     w.cpt <- w.cpt$cpt.th[[1]]
-     if(is.na(w.cpt[1])) w.cpt <- c() else { w.cpt <- sort(w.cpt)}
-   return( list( cpt=c(w.cpt, length(x)) ) )
-}
 
-```
 
 ## Assesment measure
 
@@ -879,10 +811,12 @@ one_simu_seg <- function(sim_, seg.method_, sim.method_){
 
 ###
 for(sim.met in Sim.method){
-  for(sim_ext in Simu_Ext){
+#sim.met <- Sim.method[[1]] 
+ for(sim_ext in Simu_Ext){
     for(seg.met in Seg.method){
       lapply(sim_ext, FUN=one_simu_seg, seg.method_=seg.met,  sim.method_=sim.met)
-}}}
+    }}
+}
 
 ```
 
@@ -924,10 +858,12 @@ one_simu_score <- function(sim_, seg.method_, sim.method_, sco.methods_){
 ##
 ## sim.met = Sim.method[[1]]; sim_ext = Simu_Ext[[1]]; seg.met = Seg.method[[1]]
 for(sim.met in Sim.method){
-  for(sim_ext in Simu_Ext){
+#sim.met <- Sim.method[[1]] 
+ for(sim_ext in Simu_Ext){
     for(seg.met in Seg.method){
       lapply(sim_ext, FUN=one_simu_score, seg.method_=seg.met, sim.method_=sim.met, sco.methods_=Sco.method)
-    }}}
+    }}
+}
 
 ```
 
@@ -974,7 +910,8 @@ for(sim_ext in Simu_Ext){
               kable_styling(bootstrap_options = c("hover", "striped")) %>%
               add_header_above(c(" " = 1, "Time" = nb_lg, "MSE" = nb_lg, "E(K=K*)" = nb_lg, "ARI" = nb_lg)) %>%
               column_spec((1:nb_so-1)*nb_lg+1, border_right = T) %>% 
-              row_spec(c(1, 6, 10), bold = T, color = "white", background = "#D7261E")
+              row_spec(c(1, 9, 10), bold = T, color = "white", background = "#00FF00") %>%
+              row_spec(c(3, 5, 6), bold = T, color = "white", background = "#A9F5A9")
      print(essai)
   }
     
@@ -998,12 +935,13 @@ for(sim_ext in Simu_Ext){
     data_to_show <- do.call(cbind, data_to_show)[, c(1, icol)]
     colnames(data_to_show)[1] <- "Met"
 
-     essai <- kable(data_to_show, row.names = FALSE,  align="c", format="html", 
+     essai <- kable(data_to_show, row.names = FALSE,  align="c", format="html",
                     caption=paste0(sim_ext[[1]]$Name, ", ", Sim.method[[2]]$Name) ) %>%
               kable_styling(bootstrap_options = c("hover", "striped")) %>%
               add_header_above(c(" " = 1, "Time" = nb_lg, "MSE" = nb_lg, "E(K=K*)" = nb_lg, "ARI" = nb_lg)) %>%
-              column_spec((1:nb_so-1)*nb_lg+1, border_right = T) %>% 
-              row_spec(c(1, 6, 10), bold = T, color = "white", background = "#D7261E")
+              column_spec((1:nb_so-1)*nb_lg+1, border_right = T) %>%
+              row_spec(c(1, 9, 10), bold = T, color = "white", background = "#2E2EFE") %>%
+              row_spec(c(3, 5, 6), bold = T, color = "white", background = "#A9BCF5")
      print(essai)
   }
     
@@ -1027,12 +965,13 @@ for(sim_ext in Simu_Ext){
     data_to_show <- do.call(cbind, data_to_show)[, c(1, icol)]
     colnames(data_to_show)[1] <- "Met"
 
-     essai <- kable(data_to_show, row.names = FALSE,  align="c", format="html", 
+     essai <- kable(data_to_show, row.names = FALSE,  align="c", format="html",
                     caption=paste0(sim_ext[[1]]$Name, ", ", Sim.method[[3]]$Name) ) %>%
               kable_styling(bootstrap_options = c("hover", "striped")) %>%
               add_header_above(c(" " = 1, "Time" = nb_lg, "MSE" = nb_lg, "E(K=K*)" = nb_lg, "ARI" = nb_lg)) %>%
-              column_spec((1:nb_so-1)*nb_lg+1, border_right = T)  %>% 
-              row_spec(c(1, 6, 10), bold = T, color = "white", background = "#D7261E")
+              column_spec((1:nb_so-1)*nb_lg+1, border_right = T)  %>%
+              row_spec(c(1, 9, 10), bold = T, color = "white", background = "#D7261E") %>%
+              row_spec(c(3, 5, 6), bold = T, color = "white", background = "#F5A9A9")
      print(essai)
   }
 ```
