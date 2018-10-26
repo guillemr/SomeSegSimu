@@ -156,7 +156,7 @@ one_Extend_Simu_Lg <- function(sim_, alpha_){
   return(sim_)
 }
 
-Simu_Ext <- lapply(Simu, FUN=function(sim_, alphas_=c(1, 2)){
+Simu_Ext <- lapply(Simu, FUN=function(sim_, alphas_=c(1, 2)){ #alphas_=c(1, 2, 4, 10)){
   new_sim <- lapply(alphas_, FUN=one_Extend_Simu_Lg, sim=sim_)
   return(new_sim)
 })
@@ -271,6 +271,34 @@ Seg.method[[i]]$FUN <- function(x){
 
 ```
 
+#### FPSN Kmax=alphaFPOP
+
+```{r FPOP_2Kmax}
+i <- i+1
+library(capushe)
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "Fpop-Fpsn"
+Seg.method[[i]]$FUN <- function(x){
+  n <- length(x)
+  penalty <- 2*log(length(x))
+  res <- Fpop(x, lambda=penalty)
+  Kmax <- 4*length(res$t.est)
+  Kboundup <- trunc(n/2) - 1
+  Kbounddw <- 100
+
+  Kmax <- min(max(Kmax, Kbounddw), Kboundup)
+  res <- Fpsn(x, Kmax=Kmax)
+
+  dataCapushe <- data.frame(name=1:Kmax,
+                            pen.shape=lchoose(n-1,0:(Kmax-1)),
+                            complexity=1:Kmax, contrast=res$J.est)
+  KC <- try(DDSE(dataCapushe, pct=0.2))
+  KJ <- try(Djump(dataCapushe))
+  if(class(KC) == "try-error"){ K <- as.integer(KJ@model) } else { K <- as.integer(KC@model) }
+  return( list(cpt=res$t.est[K, 1:K]) )
+}
+```
+
 #### RFPOP-2log(n)
 
 ```{r RFPOP_default}
@@ -285,6 +313,8 @@ Seg.method[[i]]$FUN <- function(x){
 }
 
 ```
+
+
 
 
 #### FPOP-CROPS-Cap
@@ -582,8 +612,35 @@ Seg.method[[i]]$FUN <- function(x){
 
 ```
 
+#### AR1-seg
 
+```{r ar1seg}
+library(AR1seg)
+i <- i+1
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "AR1seg-100"
+Seg.method[[i]]$FUN <- function(x){
+  res=AR1seg_func(x, Kmax=100, rho=TRUE)
+  a=c(1, res$PPSelectedBreaks[1:(res$PPselected-1)]+1)
+  b=res$PPSelectedBreaks[1:(res$PPselected)]
+  return( list( cpt=as.vector(b)))
+}
 
+```
+
+#### cumSeg
+
+```{r cumSeg}
+library(cumSeg)
+i <- i+1
+Seg.method[[i]] <- list()
+Seg.method[[i]]$Name <- "cumSeg"
+Seg.method[[i]]$FUN <- function(x){
+  res <- jumpoints(x, k=100)
+  return( list( cpt=c( which(diff(res$fitted.values)!=0), length(x)) ) )
+}
+
+```
 ## Assesment measure
 
 We first define a set of functions to recover:
@@ -910,8 +967,8 @@ for(sim_ext in Simu_Ext){
               kable_styling(bootstrap_options = c("hover", "striped")) %>%
               add_header_above(c(" " = 1, "Time" = nb_lg, "MSE" = nb_lg, "E(K=K*)" = nb_lg, "ARI" = nb_lg)) %>%
               column_spec((1:nb_so-1)*nb_lg+1, border_right = T) %>% 
-              row_spec(c(1, 9, 10), bold = T, color = "white", background = "#00FF00") %>%
-              row_spec(c(3, 5, 6), bold = T, color = "white", background = "#A9F5A9")
+              row_spec(c(1, 10, 11), bold = T, color = "white", background = "#00FF00") %>%
+              row_spec(c(3, 6, 7), bold = T, color = "white", background = "#A9F5A9")
      print(essai)
   }
     
@@ -940,8 +997,8 @@ for(sim_ext in Simu_Ext){
               kable_styling(bootstrap_options = c("hover", "striped")) %>%
               add_header_above(c(" " = 1, "Time" = nb_lg, "MSE" = nb_lg, "E(K=K*)" = nb_lg, "ARI" = nb_lg)) %>%
               column_spec((1:nb_so-1)*nb_lg+1, border_right = T) %>%
-              row_spec(c(1, 9, 10), bold = T, color = "white", background = "#2E2EFE") %>%
-              row_spec(c(3, 5, 6), bold = T, color = "white", background = "#A9BCF5")
+              row_spec(c(1, 10, 11), bold = T, color = "white", background = "#2E2EFE") %>%
+              row_spec(c(3, 6, 7), bold = T, color = "white", background = "#A9BCF5")
      print(essai)
   }
     
@@ -970,8 +1027,8 @@ for(sim_ext in Simu_Ext){
               kable_styling(bootstrap_options = c("hover", "striped")) %>%
               add_header_above(c(" " = 1, "Time" = nb_lg, "MSE" = nb_lg, "E(K=K*)" = nb_lg, "ARI" = nb_lg)) %>%
               column_spec((1:nb_so-1)*nb_lg+1, border_right = T)  %>%
-              row_spec(c(1, 9, 10), bold = T, color = "white", background = "#D7261E") %>%
-              row_spec(c(3, 5, 6), bold = T, color = "white", background = "#F5A9A9")
+              row_spec(c(1, 10, 11), bold = T, color = "white", background = "#D7261E") %>%
+              row_spec(c(3, 6, 7), bold = T, color = "white", background = "#F5A9A9")
      print(essai)
   }
 ```
