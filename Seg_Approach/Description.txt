@@ -1,1 +1,0 @@
-This subfolder is used to store the result of all segmentation approach in .RData.
