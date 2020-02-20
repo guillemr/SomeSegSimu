@@ -172,20 +172,7 @@ listMethod[[i]] <- new("CptMethod",
                        })
 i <- i+1
 
-listMethod[[i]] <- new("CptMethod",
-                       Name = "FDRseg-.05",
-                       Fun = function(y){
-                         n <- length(y)
-                         alpha <- 0.05
-                         ## compute quantile if not available
-                         file.quantile <- paste("Simu_FDRseg/fdrseg_qtl", n, "alpha=", alpha, ".RData", sep="")
-                         load(file.quantile)
-                         ## segmentation
-                         res <- fdrseg(y, q=qtl.fdrseg)
-                         cpt <- c(res$left[-1]-1, length(y))
-                         return(cpt)
-                       })
-i <- i+1
+
 
 
 
@@ -210,15 +197,7 @@ listMethod[[i]] <- new("CptMethod",
                        })
 i <- i+1
 
-# ## Wbs
-listMethod[[i]] <- new("CptMethod",
-                       Name = "Bft-Wbs",
-                       Fun = function(y){
-                         w <- wbs.cpt(y)
-                         w.cpt <- c(sort(w$cpt), length(y))
-                         return(w.cpt)
-                       })
-i <- i+1
+
 
 ##################################################################################################
 ## WBS

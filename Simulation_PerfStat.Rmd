@@ -234,7 +234,7 @@ This is what we do below.
 
 ```{r fdrseg, message=F, results='hide'}
 signal.length <- sort(unique(sapply(allNoise, function(x) x@Lg)))
-for(alpha in c(0.1, 0.05)){
+for(alpha in c(0.1)){
 mclapply(signal.length, FUN=function(n){
   file.quantile <- paste("Simu_FDRseg/fdrseg_qtl", n, "alpha=", alpha, ".RData", sep="")
   if(!file.exists(file.quantile)){
@@ -379,8 +379,10 @@ In details :
 1) we count the number of times an approach is at least as good as another one in terms of mse, ari or K. Defining 
 $\mathbf{1}$ the indicator function, this is
 is $$ S(m, m') = \sum_d \sum_i \mathbf{1}(Score_{mdi}^{(c)} \leq Score_{m'di}^{(c)}) $$
-2) we then count how many times $S(m, m')$ is strictly larger than $S(m',m)$ and divide by the number of methods $m'$ and multiply
-by 100 to get a percentage. 
+
+2) for each method $m$ we report (in percentage :percAE) the average $S(m, m')$ : $\frac{100}{M-1} \sum_{m'} S(m, m'), $ where $M$ is the number of methods. 
+
+3) we also count how many times $S(m, m')$ is strictly larger than $S(m',m)$ and rank approches based on this score.
 
 Below we report this for the Gauss, Student and ARMA simulations.
 The closer the final score is to 100 the better the approach is in terms of the criteria.
@@ -560,7 +562,7 @@ getCompareMat_perDt <- function(i_s, i_n, subsetMethods){ ## i_s = ARI:1, MSE:2,
 
 For all methods not knowing K.
 
-```{r}
+```{r, fig.width=16, fig.height=12}
 
 ## GAUSS
 all <- lapply(1:3, FUN=getCompareMat_perDt, i_n=1, subsetMethods=allUnknown)
@@ -591,7 +593,7 @@ grid.arrange(#all[[1]]+ggtitle("ARMA - ARI"),
 
 For a subset of methods not knowing K.
 
-```{r}
+```{r, fig.width=16, fig.height=12}
 
 ## GAUSS
 all <- lapply(1:3, FUN=getCompareMat_perDt, i_n=1, subsetMethods=someKnown)
