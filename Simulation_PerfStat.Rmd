@@ -2,7 +2,9 @@
 title: "Comparison of Approaches to Detecting Change-in-mean"
 author: "Guillem Rigaill and Paul Fearnhead"
 date: "10 february 2020"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 
@@ -32,7 +34,7 @@ set.seed(10022020)
 
 ## Specifying a Data Scenario
 
-Each data scenario is defined by an S4 class DataDesc. 
+Each data scenario is defined by an S4 class DatasetDesc. 
 This class defines four features of the data scenario:
 
 - the name of the scenario;
@@ -52,10 +54,10 @@ source("DatasetDesc.R")
 initialDatasetDesc <- list()
 i <- 1
 initialDatasetDesc[[i]] <- new("DatasetDesc", 
-                Name  = "Dt1", 
-                bkp   = as.integer(c(0, 204, 266, 307, 471, 511, 819, 901, 1331, 1556, 1597, 1658, 2048)),
-                mu    = c(0, 14.64, -3.66, 7.32, -7.32, 10.98, -4.39, 3.29, 19.03,7.68, 15.37, 0),
-                sigma = 10
+        Name  = "Dt1", 
+        bkp   = as.integer(c(0, 204, 266, 307, 471, 511, 819, 901, 1331, 1556, 1597, 1658, 2048)),
+        mu    = c(0, 14.64, -3.66, 7.32, -7.32, 10.98, -4.39, 3.29, 19.03,7.68, 15.37, 0),
+        sigma = 10
 )
 i <- i+1
 source("InitialDatasets.R")
@@ -81,9 +83,11 @@ Here we plot an example profile for each dataset.
 allplots <- lapply(initialDatasetDesc, FUN=function(dataDesc){
   y <- simulation(dataDesc)
   dataY <- data.frame(x=1:length(y), y=y, smt=dataDesc@signal)
-  plot_data <- ggplot(dataY, aes(x=x, y=y)) + geom_point(size=0.2) + geom_line(aes(x=x, y=smt, color="red")) + 
-    geom_vline(xintercept = dataDesc@bkp, color="blue") + theme(legend.position = "none", plot.title = element_text(hjust = 0.5)) +
-  ggtitle(paste0("Dataset: ", dataDesc@Name))
+  plot_data <- ggplot(dataY, aes(x=x, y=y)) + 
+    geom_point(size=0.2) + geom_line(aes(x=x, y=smt, color="red")) + 
+    geom_vline(xintercept = dataDesc@bkp, color="blue") + 
+    theme(legend.position = "none", plot.title = element_text(hjust = 0.5)) +
+    ggtitle(paste0("Dataset: ", dataDesc@Name))
   plot_data
   
 })
@@ -112,7 +116,8 @@ This is done using the scaleDesc and expandDesc of the DataDesc class.
 
 scaledDatasetDesc <- unlist(
   lapply(initialDatasetDesc, FUN=function(dataDesc){
-    lapply(c(0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.4, 1.6, 1.8), FUN=function(alpha) scaleDesc(dataDesc, alpha))
+    lapply(c(0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.4, 1.6, 1.8), 
+           FUN=function(alpha) scaleDesc(dataDesc, alpha))
   })
   )
 
@@ -141,9 +146,6 @@ allNoise <- c(allGauss, allStud, allARMA)
 ## see dataDesc code
 allNoise <- lapply(allNoise, FUN=function(dataDesc) simulateMany(dataDesc, nrepeat=nrepeat))
 
-## a quick overview of signal length and number of changes
-## grid.arrange(qplot(sapply(allNoise, function(x) x@Lg), geom="histogram") + ggtitle("Histogram of signal length"),
-## qplot(sapply(allNoise, function(x) x@K), geom="histogram") + ggtitle("Histogram of number of true changes"), ncol=2, nrow=1)
 ```
 
 
@@ -331,7 +333,8 @@ issue due to segment length).
 
 
 ```{r mlknownk}
-## RUN ML and WBS with known K (idea measure the difference between getting changes and mse and getting K)
+## RUN ML and WBS with known K (idea measure the difference 
+## between getting changes and mse and getting K)
 for(dataDesc in allNoise){
   load(dataDesc@fileDt)
   load(dataDesc@fileRs)
@@ -379,9 +382,9 @@ In details :
 
 1) we count the number of times an approach is at least as good as another one in terms of mse, ari or K. Defining 
 $\mathbf{1}$ the indicator function, this is
-is $$ S(m, m') = \sum_d \sum_i \mathbf{1}(Score_{mdi}^{(c)} \leq Score_{m'di}^{(c)}) $$
+is $$S(m, m') = \sum_d \sum_i \mathbf{1}(Score_{mdi}^{(c)} \leq Score_{m'di}^{(c)})$$
 
-2) for each method $m$ we report (in percentage :percAE) the average $S(m, m')$ : $\frac{100}{M-1} \sum_{m'} S(m, m'), $ where $M$ is the number of methods. 
+2) for each method $m$ we report (in percentage :percAE) the average $S(m, m')$ : $\frac{100}{M-1} \sum_{m'} S(m, m'),$ where $M$ is the number of methods. 
 
 3) we also count how many times $S(m, m')$ is strictly larger than $S(m',m)$ and rank approches based on this score.
 
@@ -402,9 +405,12 @@ allUnknown <- c("Pelt-Dft", "Fpop-Yao", "Fpop-Yao-Ha", "Fpop-Yao-L4",
                 "Wbs2-.9", "Wbs2-.95", "IDetect", "mosum", "Rpop-Yao")
 ## additionnal Bft-Wbs and FDRseg-.05
 
-someKnown <- c("Pelt-Dft", "Fpop-Yao", "Fpop-Crops-Lb", "Fpop-Crops-Lb-L4", "FDRseg-.1", "Bft-Tguh", "Bft-Wbs", "Wbs2-.9", "Wbs2-.95", "IDetect", "mosum", "Rpop-Yao")
+someKnown <- c("Pelt-Dft", "Fpop-Yao", "Fpop-Crops-Lb", "Fpop-Crops-Lb-L4", "FDRseg-.1", 
+               "Bft-Tguh", "Bft-Wbs", "Wbs2-.9", "Wbs2-.95", 
+               "IDetect", "mosum", "Rpop-Yao")
 
-minSizeKnown <- c("Fpop-Yao-L4", "Fpop-Crops-Lb-L4", "Fpop-Crops-Lb-Ha-L4", "IDetect", "mosum")
+minSizeKnown <- c("Fpop-Yao-L4", "Fpop-Crops-Lb-L4", 
+                  "Fpop-Crops-Lb-Ha-L4", "IDetect", "mosum")
 allKnown <- c("MaxLik-K*", "Bft-Wbs-K*", "BinSeg-K*",  "Rpop-K*")            
 
 ## COMPARE
@@ -419,7 +425,8 @@ getCompareMat <- function(i_s, i_n, subsetMethods){
   })
 
   matAllScores <- do.call(rbind, allScores)
-  compareMat <- matrix(nr=ncol(matAllScores), nc=ncol(matAllScores)) ## atleast as Good (less than mse, ari, k...)
+  compareMat <- matrix(nr=ncol(matAllScores), nc=ncol(matAllScores)) 
+  ## atleast as Good (less than mse, ari, k...)
   rownames(compareMat) <- colnames(matAllScores)
   colnames(compareMat) <- colnames(matAllScores)
   for(i in 1:ncol(compareMat)){
@@ -439,7 +446,8 @@ getVote <- function(i_s, i_n, subsetMethods){
  diag(essai)  <- 0
  #round(100*rowSums(countV)/(nrow(countV)-1), 1)
  # ranking with ex-aequo
- data.frame(rank=match(rowSums(countV), sort(rowSums(countV), decreasing = T)),    percAE=round(100*rowSums(essai)/(nrow(countV)-1)))
+ data.frame(rank=match(rowSums(countV), sort(rowSums(countV), decreasing = T)),   
+        percAE=round(100*rowSums(essai)/(nrow(countV)-1)))
 }
 
 ```
@@ -751,4 +759,5 @@ plotDataSet(initialDatasetDesc[[i_d]], mName_ = mName_);
 
 
 ```
+
 
