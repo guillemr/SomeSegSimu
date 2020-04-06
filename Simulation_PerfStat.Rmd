@@ -183,13 +183,14 @@ source("InitialCptMethod_knowK.R")  ## Method for a fixed number of changes (les
 
 Here is a list of all methods :
 
+
 - "Pelt-Dft" : pelt (changepoint package) with its default parameter.
 - "Fpop-Yao" : fpop (gfpop package) with the penalty of Yao 1989.
 - "Rpop-Yao" : robust fpop (gfpop package) with the penalty of Yao 1989.
 - "Fpop-Yao-Ha" : fpop with the penalty of Yao 1989 and the Hall estimate of the variance (rather than the MAD based estimate).
 - "Fpop-Yao-L4" :  fpop with the penalty of Yao 1989 and minimum segment length of 4.
-- "Fpop-Crops-Lb" : Crops and fpop with the penalty of Lebarbier 2005. The min penalty is set to $2\log(n) - 2*log(Kmax)+3$ with $Kmax=min(n/2-1, 3*n/\log(n))$ and the max penalty to $2\log(n)+3$.
-- "Fpop-Crops-Lb-L4", Crops and fpop with the penalty of Lebarbier 2005 and minimum segment length of 4. The min penalty is set to $2\log(n) - 2*log(Kmax)+3$ with $Kmax=min(n/4-1, 3*n/\log(n))$ and the max penalty to $2\log(n)+3$.
+- "Fpop-Crops-Lb" : Crops and fpop with the penalty of Lebarbier 2005. The min penalty is set to $2\log(n) - 2*\log(K_{max})+3$ with $K_{max}=\min(n/2-1, 3*n/\log(n))$ and the max penalty to $2\log(n)+3$.
+- "Fpop-Crops-Lb-L4", Crops and fpop with the penalty of Lebarbier 2005 and minimum segment length of 4. The min penalty is set to $2\log(n) - 2*\log(K_{max})+3$ with $K_{max}=\min(n/4-1, 3*n/\log(n))$ and the max penalty to $2\log(n)+3$.
 - "Fpop-Crops-Lb-Ha", Crops and fpop with the penalty of Lebarbier 2005 and the Hall estimate of the variance.
 - "Fpop-Crops-Lb-Ha-L4", Crops and fpop with the penalty of Lebarbier 2005 and the Hall estimate of the variance and minimum segment length of 4.
 - "Fpop-Crops-Lb-Rob" : Crops and fpop using the biweight loss (gfpop package) with the penalty of Lebarbier 2005.
@@ -205,7 +206,7 @@ Here is a list of all methods :
 - "Wbs2-.95" : WBS2 with a $\lambda$ of 0.95 (Wbs2 github code).
 - "IDetect" : IDetect (IDetect package) with its default parameters.
 - "mosum" : Multiscale local pruning approach (mosum package) with its default parameters.
-            
+               
 Here is a list of all methods for a known K :
 
 - "MaxLik-K*" : pDPA (jointseg package) with known K.

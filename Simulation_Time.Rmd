@@ -1,0 +1,259 @@
+---
+title: "Comparison of Approaches to Detecting Change-in-mean (TIME)"
+author: "Guillem Rigaill and Paul Fearnhead"
+date: "10 february 2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+## Overview
+
+This document provides extensive simulation results comparing a range of different methods for detecting change-in-mean in a univariate data. These have been implemented in a way such that it should be possible to extend the comparison to other data scenarios; new methods; or different measures of performance. Full code is available at:
+https://github.com/guillemr/SomeSegSimu
+
+This document consider only two data scenarios (no or many changepoints) to evaluate runtimes for signals up to $n=65536$. We consider the  changepoint detection methods described in the Simulation_PerfStat.Rmd file.
+
+```{r setup, include=FALSE}
+#rm(list=ls())
+#knitr::opts_chunk$set(echo = TRUE)
+options(width = 100)
+library(parallel)
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(gridExtra)
+library(reshape2)
+library(dplyr)
+## number of simu per dataset
+nrepeat <- 10
+mc.cores <- 20
+max.time <- 180 ## seconds
+signal.length <- trunc(64* 2^(0:10))
+set.seed(10022020)
+```
+
+
+
+## Definition of the changepoint methods
+
+We store changepoint methods as an S4 class with a name and a function taking the data as an input and returning a set of changes.
+Here is the code for our first changepoint method.
+All others are defined in the InitialCptMethod.R F file.
+
+
+```{r cpt_method, message=F}
+source("utils/all_packages_and_a_few_functions.R")
+source("CptMethod.R")
+listMethod <- list()
+i <- 1
+##################################################################################################
+## PELT default and mBIC, for Yao's see Fpop
+listMethod[[i]] <- new("CptMethod", 
+                       Name = "Pelt-Dft", 
+                       Fun = function(y){
+                         w <- cpt.mean(y,method="PELT")
+                         return(c(cpts(w), length(y)))
+                       })
+i <- i+1
+
+source("InitialCptMethod.R")        ## Method infering the number of changes
+## listMethod[[11]]@Name
+## 11 = FDRseg-.1 for speed purposes we run quantile with default 50 rather than 1000 as in PerfStat.Rmd
+listMethod[[11]] <- new("CptMethod",
+                       Name = "FDRseg-.1",
+                       Fun = function(y){
+                         n <- length(y)
+                         alpha <- 0.1
+                         ## compute quantile if not available
+                         file.quantile <- paste("Simu_FDRseg_time/fdrseg_qtl", n, "alpha=", alpha, ".RData", sep="")
+                         load(file.quantile)
+                         ## segmentation
+                         res <- fdrseg(y, q=qtl.fdrseg)
+                         cpt <- c(res$left[-1]-1, length(y))
+                         return(cpt)
+                       })
+```
+
+Here is a list of all methods :
+
+- "Pelt-Dft" : pelt (changepoint package) with its default parameter.
+- "Fpop-Yao" : fpop (gfpop package) with the penalty of Yao 1989.
+- "Rpop-Yao" : robust fpop (gfpop package) with the penalty of Yao 1989.
+- "Fpop-Yao-Ha" : fpop with the penalty of Yao 1989 and the Hall estimate of the variance (rather than the MAD based estimate).
+- "Fpop-Yao-L4" :  fpop with the penalty of Yao 1989 and minimum segment length of 4.
+- "Fpop-Crops-Lb" : Crops and fpop with the penalty of Lebarbier 2005. The min penalty is set to $2\log(n) - 2*\log(K_{max})+3$ with $K_{max}=\min(n/2-1, 3*n/\log(n))$ and the max penalty to $2\log(n)+3$.
+- "Fpop-Crops-Lb-L4", Crops and fpop with the penalty of Lebarbier 2005 and minimum segment length of 4. The min penalty is set to $2\log(n) - 2*\log(K_{max})+3$ with $K_{max}=\min(n/4-1, 3*n/\log(n))$ and the max penalty to $2\log(n)+3$.
+- "Fpop-Crops-Lb-Ha", Crops and fpop with the penalty of Lebarbier 2005 and the Hall estimate of the variance.
+- "Fpop-Crops-Lb-Ha-L4", Crops and fpop with the penalty of Lebarbier 2005 and the Hall estimate of the variance and minimum segment length of 4.
+- "Fpop-Crops-Lb-Rob" : Crops and fpop using the biweight loss (gfpop package) with the penalty of Lebarbier 2005.
+- "Fpsn-Lb" : pDPA (jointseg package) with the penalty of Lebarbier 2005 (with maximum number of changepoint of $3n/\log(n)$.
+- "FDRseg-.1" : FDRseg with a quantile $\alpha$ of 0.1 (defaut). Quantile are estimated once for each $n$ using $1000/\alpha$ monte-carlo simulation rather than the default $50/\alpha$.
+- "FDRseg-.05" : FDRseg with a quantile alpha of 0.05.
+- "Bft-Tguh" : TGUH (Breakfast package) with its default parameters.
+- "Bft-Wbs" : WBS (Breakfast package) with its default parameters.
+- "Bft-Hyb" : Hybrid (TGUH/WBS) approach the breakfast package with its default parameters.
+- "Wbs-Sic" : WBS with the SIC criteria (wbs package).
+- "Wbs-Th1" : WBS with at threshold of 1 (Wbs package).
+- "Wbs2-.9", : WBS2 with a $\lambda$ of 0.9 (Wbs2 github code).
+- "Wbs2-.95" : WBS2 with a $\lambda$ of 0.95 (Wbs2 github code).
+- "IDetect" : IDetect (IDetect package) with its default parameters.
+- "mosum" : Multiscale local pruning approach (mosum package) with its default parameters.
+  
+
+# Running all approaches
+
+
+All methods are used on all dataset after an initial
+scaling of the data using a difference based estimator
+of the standard deviation.
+
+# Scenario 1 (no change)
+
+
+Here we simulate profiles with no change and a Gaussian noise with $n$ form $64$ to $65536$.
+For each method we progressly increase $n$ and stop as soon as the average runtime is larger than 3 minutes.
+
+We then report a table with the mean runtimes of all methods as a function of $n$
+
+
+```{r run_nochange}
+
+## PROFILE WITHOUT CHANGES
+profile.without.changes <- lapply(signal.length, FUN=function(n){
+   lapply(rep(n, nrepeat), FUN=rnorm)
+})
+
+
+list.output <- list()
+if(!file.exists("Runtime_WithoutChange.RData")){
+for(met in listMethod){
+  cat(met@Name)
+  ave.time <- 0
+  i <- 1
+  ## WHILE LOOP WE RUN AS LONG AS RUNTIME LOWER THAN max.time
+  while( i <= length(profile.without.changes) ){
+    cat(i, ", ")
+
+    to.analyze <- profile.without.changes[[i]]
+    n <- length(to.analyze[[1]])
+if((ave.time <= max.time)){
+    ## FOR FDRSEG RUN QUANTILE
+    if(met@Name == "FDRseg-.1"){
+      alpha <- 0.1
+      file.quantile <- paste("Simu_FDRseg_time/fdrseg_qtl", n, 
+		"alpha=", alpha, ".RData", sep="")
+      if(!file.exists(file.quantile)){
+        r = round(50/min(alpha, 1 - alpha)) ## default is 50 (we run this once so 1000)
+        qtl.fdrseg <- simulQuantile(1 - alpha, n, r, "fdrseg")
+        save(qtl.fdrseg, file=file.quantile) 
+      }
+    }
+    ## END FDRSEG
+    
+    ## FOR ALL
+    
+    timings <- mclapply(to.analyze, FUN=function(x) system.time(met@Fun(x))[3], mc.cores=mc.cores)
+    timings <- unlist(timings)
+    list.output[[length(list.output)+1]] <- data.frame(timings=timings, 
+			method=met@Name, n=n, Breaks="NoChange") 
+    ave.time <- mean(timings)
+    ## END FOR ALL
+    } else {
+    list.output[[length(list.output)+1]] <- data.frame(timings=rep(NA, nrepeat), 
+			method=met@Name, n=n,     Breaks="NoChange") 
+    }
+    i <- i+1
+  }
+  save(list.output, file="Runtime_WithoutChange.RData")
+  cat("\n")
+}
+}
+load(file="Runtime_WithoutChange.RData")
+mat <- do.call(rbind, list.output)
+mat.ave <- mat %>% group_by(method, n) %>% summarise(timings = mean(timings))
+mat.ave <- mat.ave[order(mat.ave$method, mat.ave$n), ]
+
+all.res <- matrix(mat.ave$timings, ncol=length(signal.length), byrow=TRUE)
+colnames(all.res) <- matrix(mat.ave$n, ncol=length(signal.length), byrow=TRUE)[1, ]
+rownames(all.res) <- matrix(mat.ave$method, ncol=length(signal.length), byrow=TRUE)[, 1]
+signif(all.res[, 4:11], 2)
+```
+
+# Scenario 2 (linear number of changes)
+
+Here we simulate profiles with a linear number of changes and a Gaussian noise with $n$ form $64$ to $65536$.
+All segments are of size $64$. Odd segments have a mean of 0. Even segments a mean of 1.
+For each method we progressly increase $n$ and stop as soon as the average runtime is larger than 3 minutes.
+
+We then report a table with the mean runtimes of all methods as a function of $n$
+
+```{r}
+
+
+
+n.max <- max(signal.length)
+signal <- rep(rep(0:1, each=64), n.max/128)
+
+profile.with.changes <- lapply(profile.without.changes, FUN=function(profiles){
+     lapply(profiles, FUN=function(x) x + signal[1:length(x)])
+})
+
+list.output <- list()
+if(!file.exists("Runtime_WithChange.RData")){
+for(met in listMethod){
+  cat(met@Name)
+  ave.time <- 0
+  i <- 1
+  ## WHILE LOOP WE RUN AS LONG AS RUNTIME LOWER THAN max.time
+  while( i <= length(profile.with.changes) ){
+    cat(i, ", ")
+
+    to.analyze <- profile.with.changes[[i]]
+    n <- length(to.analyze[[1]])
+if((ave.time <= max.time)){
+    ## FOR FDRSEG RUN QUANTILE
+    if(met@Name == "FDRseg-.1"){
+      alpha <- 0.1
+      file.quantile <- paste("Simu_FDRseg_time/fdrseg_qtl", n, 
+			"alpha=", alpha, ".RData", sep="")
+      if(!file.exists(file.quantile)){
+        r = round(50/min(alpha, 1 - alpha)) ## default is 50 (we run this once so 1000)
+        qtl.fdrseg <- simulQuantile(1 - alpha, n, r, "fdrseg")
+        save(qtl.fdrseg, file=file.quantile) 
+      }
+    }
+    ## END FDRSEG
+    
+    ## FOR ALL
+    
+    timings <- mclapply(to.analyze, FUN=function(x) system.time(met@Fun(x))[3], mc.cores=mc.cores)
+    timings <- unlist(timings)
+    list.output[[length(list.output)+1]] <- data.frame(timings=timings, 
+			method=met@Name, n=n, Breaks="NoChange") 
+    ave.time <- mean(timings)
+    ## END FOR ALL
+    } else {
+    list.output[[length(list.output)+1]] <- data.frame(timings=rep(NA, nrepeat), 
+			method=met@Name, n=n,     Breaks="NoChange") 
+    }
+    i <- i+1
+  }
+  save(list.output, file="Runtime_WithChange.RData")
+  cat("\n")
+}
+}
+
+load(file="Runtime_WithChange.RData")
+mat <- do.call(rbind, list.output)
+mat.ave <- mat %>% group_by(method, n) %>% summarise(timings = mean(timings))
+mat.ave <- mat.ave[order(mat.ave$method, mat.ave$n), ]
+
+all.res <- matrix(mat.ave$timings, ncol=length(signal.length), byrow=TRUE)
+colnames(all.res) <- matrix(mat.ave$n, ncol=length(signal.length), byrow=TRUE)[1, ]
+rownames(all.res) <- matrix(mat.ave$method, ncol=length(signal.length), byrow=TRUE)[, 1]
+signif(all.res[, 4:11], 2)
+
+```
+
